@@ -49,6 +49,72 @@
     </Expand>
   </Type>
 
+  <Type Name="std::collections::hash::map::Keys&lt;*,*&gt;">
+    <DisplayString>{{ len={inner.base.inner.items} }}</DisplayString>
+    <Expand>
+      <Item Name="[len]">inner.base.inner.items</Item>
+
+      <CustomListItems>
+        <Variable Name="i" InitialValue="0" />
+        <Variable Name="n" InitialValue="inner.base.inner.items" />
+        <Size>inner.base.inner.items</Size>
+        <Loop>
+          <Break Condition="n == 0" />
+          <If Condition="(inner.base.inner.iter.next_ctrl[i] &amp; 0x80) == 0">
+            <!-- Bucket is populated -->
+            <Exec>n--</Exec>
+            <Item>((tuple$&lt;$T1, $T2&gt;*)inner.base.inner.iter.data.ptr.pointer)[-(i + 1)].__0</Item>
+          </If>
+          <Exec>i++</Exec>
+        </Loop>
+      </CustomListItems>
+    </Expand>
+  </Type>
+
+  <Type Name="std::collections::hash::map::Values&lt;*,*&gt;">
+    <DisplayString>{{ len={inner.base.inner.items} }}</DisplayString>
+    <Expand>
+      <Item Name="[len]">inner.base.inner.items</Item>
+
+      <CustomListItems>
+        <Variable Name="i" InitialValue="0" />
+        <Variable Name="n" InitialValue="inner.base.inner.items" />
+        <Size>inner.base.inner.items</Size>
+        <Loop>
+          <Break Condition="n == 0" />
+          <If Condition="(inner.base.inner.iter.next_ctrl[i] &amp; 0x80) == 0">
+            <!-- Bucket is populated -->
+            <Exec>n--</Exec>
+            <Item>((tuple$&lt;$T1, $T2&gt;*)inner.base.inner.iter.data.ptr.pointer)[-(i + 1)].__1</Item>
+          </If>
+          <Exec>i++</Exec>
+        </Loop>
+      </CustomListItems>
+    </Expand>
+  </Type>
+
+  <Type Name="std::collections::hash::map::ValuesMut&lt;*,*&gt;">
+    <DisplayString>{{ len={inner.base.inner.items} }}</DisplayString>
+    <Expand>
+      <Item Name="[len]">inner.base.inner.items</Item>
+
+      <CustomListItems>
+        <Variable Name="i" InitialValue="0" />
+        <Variable Name="n" InitialValue="inner.base.inner.items" />
+        <Size>inner.base.inner.items</Size>
+        <Loop>
+          <Break Condition="n == 0" />
+          <If Condition="(inner.base.inner.iter.next_ctrl[i] &amp; 0x80) == 0">
+            <!-- Bucket is populated -->
+            <Exec>n--</Exec>
+            <Item>((tuple$&lt;$T1, $T2&gt;*)inner.base.inner.iter.data.ptr.pointer)[-(i + 1)].__1</Item>
+          </If>
+          <Exec>i++</Exec>
+        </Loop>
+      </CustomListItems>
+    </Expand>
+  </Type>
+
   <Type Name="std::collections::hash::set::HashSet&lt;*,*&gt;">
     <DisplayString>{{ len={base.map.table.table.items} }}</DisplayString>
     <Expand>
@@ -117,4 +183,23 @@
       </Synthetic>
     </Expand>
   </Type>
+
+  <Type Name="std::path::PathBuf">
+    <DisplayString Condition="inner.inner.inner.bytes.len == 0"></DisplayString>
+    <DisplayString Condition="inner.inner.inner.bytes.len != 0">{ (char*)inner.inner.inner.bytes.buf.ptr.pointer,[inner.inner.inner.bytes.len]s8 }</DisplayString>
+    <Expand>
+      <Item Name="[len]">inner.inner.inner.bytes.len</Item>
+      <Item Name="[capacity]">inner.inner.inner.bytes.buf.cap</Item>
+      <Synthetic Name="[chars]">
+        <DisplayString>{(char*)inner.inner.inner.bytes.buf.ptr.pointer,[inner.inner.inner.bytes.len]s8}</DisplayString>
+        <Expand>
+          <ArrayItems>
+            <Size>inner.inner.inner.bytes.len</Size>
+            <ValuePointer>(char*)inner.inner.inner.bytes.buf.ptr.pointer</ValuePointer>
+          </ArrayItems>
+        </Expand>
+      </Synthetic>
+    </Expand>
+  </Type>
+
 </AutoVisualizer>
