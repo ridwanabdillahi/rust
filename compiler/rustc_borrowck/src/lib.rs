@@ -2,7 +2,7 @@
 
 #![feature(bool_to_option)]
 #![feature(box_patterns)]
-#![feature(const_panic)]
+#![cfg_attr(bootstrap, feature(const_panic))]
 #![feature(crate_visibility_modifier)]
 #![feature(format_args_capture)]
 #![feature(in_band_lifetimes)]
@@ -144,6 +144,7 @@ fn mir_borrowck<'tcx>(
 /// If `return_body_with_facts` is true, then return the body with non-erased
 /// region ids on which the borrow checking was performed together with Polonius
 /// facts.
+#[instrument(skip(infcx, input_body, input_promoted), level = "debug")]
 fn do_mir_borrowck<'a, 'tcx>(
     infcx: &InferCtxt<'a, 'tcx>,
     input_body: &Body<'tcx>,
@@ -152,7 +153,7 @@ fn do_mir_borrowck<'a, 'tcx>(
 ) -> (BorrowCheckResult<'tcx>, Option<Box<BodyWithBorrowckFacts<'tcx>>>) {
     let def = input_body.source.with_opt_param().as_local().unwrap();
 
-    debug!("do_mir_borrowck(def = {:?})", def);
+    debug!(?def);
 
     let tcx = infcx.tcx;
     let param_env = tcx.param_env(def.did);
@@ -276,26 +277,26 @@ fn do_mir_borrowck<'a, 'tcx>(
 
     let regioncx = Rc::new(regioncx);
 
-    let flow_borrows = Borrows::new(tcx, &body, &regioncx, &borrow_set)
-        .into_engine(tcx, &body)
+    let flow_borrows = Borrows::new(tcx, body, &regioncx, &borrow_set)
+        .into_engine(tcx, body)
         .pass_name("borrowck")
         .iterate_to_fixpoint();
-    let flow_uninits = MaybeUninitializedPlaces::new(tcx, &body, &mdpe)
-        .into_engine(tcx, &body)
+    let flow_uninits = MaybeUninitializedPlaces::new(tcx, body, &mdpe)
+        .into_engine(tcx, body)
         .pass_name("borrowck")
         .iterate_to_fixpoint();
-    let flow_ever_inits = EverInitializedPlaces::new(tcx, &body, &mdpe)
-        .into_engine(tcx, &body)
+    let flow_ever_inits = EverInitializedPlaces::new(tcx, body, &mdpe)
+        .into_engine(tcx, body)
         .pass_name("borrowck")
         .iterate_to_fixpoint();
 
-    let movable_generator = match tcx.hir().get(id) {
+    let movable_generator = !matches!(
+        tcx.hir().get(id),
         Node::Expr(&hir::Expr {
             kind: hir::ExprKind::Closure(.., Some(hir::Movability::Static)),
             ..
-        }) => false,
-        _ => true,
-    };
+        })
+    );
 
     for (idx, move_data_results) in promoted_errors {
         let promoted_body = &promoted[idx];
@@ -373,8 +374,8 @@ fn do_mir_borrowck<'a, 'tcx>(
     mbcx.report_move_errors(move_errors);
 
     rustc_mir_dataflow::visit_results(
-        &body,
-        traversal::reverse_postorder(&body).map(|(bb, _)| bb),
+        body,
+        traversal::reverse_postorder(body).map(|(bb, _)| bb),
         &results,
         &mut mbcx,
     );

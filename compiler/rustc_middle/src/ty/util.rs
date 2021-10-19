@@ -1,6 +1,5 @@
 //! Miscellaneous type-system utilities that are too small to deserve their own modules.
 
-use crate::ich::NodeIdHashingMode;
 use crate::middle::codegen_fn_attrs::CodegenFnAttrFlags;
 use crate::ty::fold::TypeFolder;
 use crate::ty::layout::IntegerExt;
@@ -18,6 +17,7 @@ use rustc_hir as hir;
 use rustc_hir::def::DefKind;
 use rustc_hir::def_id::DefId;
 use rustc_macros::HashStable;
+use rustc_query_system::ich::NodeIdHashingMode;
 use rustc_span::DUMMY_SP;
 use rustc_target::abi::{Integer, Size, TargetDataLayout};
 use smallvec::SmallVec;
@@ -516,6 +516,7 @@ impl<'tcx> TyCtxt<'tcx> {
     }
 
     /// Expands the given impl trait type, stopping if the type is recursive.
+    #[instrument(skip(self), level = "debug")]
     pub fn try_expand_impl_trait_type(
         self,
         def_id: DefId,
@@ -532,6 +533,7 @@ impl<'tcx> TyCtxt<'tcx> {
         };
 
         let expanded_type = visitor.expand_opaque_ty(def_id, substs).unwrap();
+        trace!(?expanded_type);
         if visitor.found_recursion { Err(expanded_type) } else { Ok(expanded_type) }
     }
 }

@@ -516,12 +516,12 @@ impl<'a, 'tcx> InferCtxtExt<'tcx> for InferCtxt<'a, 'tcx> {
                             });
                             let unit_obligation = obligation.with(predicate.to_predicate(tcx));
                             if self.predicate_may_hold(&unit_obligation) {
-                                err.note("this trait is implemented for `()`.");
+                                err.note("this trait is implemented for `()`");
                                 err.note(
                                     "this error might have been caused by changes to \
                                     Rust's type-inference algorithm (see issue #48950 \
                                     <https://github.com/rust-lang/rust/issues/48950> \
-                                    for more information).",
+                                    for more information)",
                                 );
                                 err.help("did you intend to use the type `()` here instead?");
                             }
@@ -533,9 +533,9 @@ impl<'a, 'tcx> InferCtxtExt<'tcx> for InferCtxt<'a, 'tcx> {
                         // example).
 
                         let trait_is_debug =
-                            self.tcx.is_diagnostic_item(sym::debug_trait, trait_ref.def_id());
+                            self.tcx.is_diagnostic_item(sym::Debug, trait_ref.def_id());
                         let trait_is_display =
-                            self.tcx.is_diagnostic_item(sym::display_trait, trait_ref.def_id());
+                            self.tcx.is_diagnostic_item(sym::Display, trait_ref.def_id());
 
                         let in_std_macro =
                             match obligation.cause.span.ctxt().outer_expn_data().macro_def_id {
@@ -1195,13 +1195,13 @@ impl<'a, 'tcx> InferCtxtPrivExt<'tcx> for InferCtxt<'a, 'tcx> {
         false
     }
 
+    #[instrument(skip(self), level = "debug")]
     fn report_fulfillment_error(
         &self,
         error: &FulfillmentError<'tcx>,
         body_id: Option<hir::BodyId>,
         fallback_has_occurred: bool,
     ) {
-        debug!("report_fulfillment_error({:?})", error);
         match error.code {
             FulfillmentErrorCode::CodeSelectionError(ref selection_error) => {
                 self.report_selection_error(
@@ -1528,6 +1528,7 @@ impl<'a, 'tcx> InferCtxtPrivExt<'tcx> for InferCtxt<'a, 'tcx> {
         )
     }
 
+    #[instrument(skip(self), level = "debug")]
     fn maybe_report_ambiguity(
         &self,
         obligation: &PredicateObligation<'tcx>,
@@ -1542,8 +1543,7 @@ impl<'a, 'tcx> InferCtxtPrivExt<'tcx> for InferCtxt<'a, 'tcx> {
         let span = obligation.cause.span;
 
         debug!(
-            "maybe_report_ambiguity(predicate={:?}, obligation={:?} body_id={:?}, code={:?})",
-            predicate, obligation, body_id, obligation.cause.code,
+            ?predicate, ?obligation.cause.code,
         );
 
         // Ambiguity errors are often caused as fallout from earlier
@@ -1556,7 +1556,7 @@ impl<'a, 'tcx> InferCtxtPrivExt<'tcx> for InferCtxt<'a, 'tcx> {
         let mut err = match bound_predicate.skip_binder() {
             ty::PredicateKind::Trait(data) => {
                 let trait_ref = bound_predicate.rebind(data.trait_ref);
-                debug!("trait_ref {:?}", trait_ref);
+                debug!(?trait_ref);
 
                 if predicate.references_error() {
                     return;

@@ -1,4 +1,3 @@
-use crate::middle::cstore::{ExternCrate, ExternCrateSource};
 use crate::mir::interpret::{AllocRange, ConstValue, GlobalAlloc, Pointer, Provenance, Scalar};
 use crate::ty::subst::{GenericArg, GenericArgKind, Subst};
 use crate::ty::{self, ConstInt, DefIdTree, ParamConst, ScalarInt, Ty, TyCtxt, TypeFoldable};
@@ -11,6 +10,7 @@ use rustc_hir::def_id::{DefId, DefIdSet, CRATE_DEF_INDEX, LOCAL_CRATE};
 use rustc_hir::definitions::{DefPathData, DefPathDataName, DisambiguatedDefPathData};
 use rustc_hir::ItemKind;
 use rustc_session::config::TrimmedDefPaths;
+use rustc_session::cstore::{ExternCrate, ExternCrateSource};
 use rustc_span::symbol::{kw, Ident, Symbol};
 use rustc_target::abi::Size;
 use rustc_target::spec::abi::Abi;
@@ -2033,12 +2033,11 @@ impl<F: fmt::Write> FmtPrinter<'_, 'tcx, F> {
         Ok(inner)
     }
 
+    #[instrument(skip(self), level = "debug")]
     fn prepare_late_bound_region_info<T>(&mut self, value: &ty::Binder<'tcx, T>)
     where
         T: TypeFoldable<'tcx>,
     {
-        debug!("prepare_late_bound_region_info(value: {:?})", value);
-
         struct LateBoundRegionNameCollector<'a, 'tcx> {
             tcx: TyCtxt<'tcx>,
             used_region_names: &'a mut FxHashSet<Symbol>,
@@ -2052,8 +2051,9 @@ impl<F: fmt::Write> FmtPrinter<'_, 'tcx, F> {
                 Some(self.tcx)
             }
 
+            #[instrument(skip(self), level = "trace")]
             fn visit_region(&mut self, r: ty::Region<'tcx>) -> ControlFlow<Self::BreakTy> {
-                debug!("LateBoundRegionNameCollector::visit_region(r: {:?}, address: {:p})", r, &r);
+                trace!("address: {:p}", r);
                 if let ty::ReLateBound(_, ty::BoundRegion { kind: ty::BrNamed(_, name), .. }) = *r {
                     self.used_region_names.insert(name);
                 } else if let ty::RePlaceholder(ty::PlaceholderRegion {
@@ -2068,8 +2068,8 @@ impl<F: fmt::Write> FmtPrinter<'_, 'tcx, F> {
 
             // We collect types in order to prevent really large types from compiling for
             // a really long time. See issue #83150 for why this is necessary.
+            #[instrument(skip(self), level = "trace")]
             fn visit_ty(&mut self, ty: Ty<'tcx>) -> ControlFlow<Self::BreakTy> {
-                debug!("LateBoundRegionNameCollector::visit_ty(ty: {:?}", ty);
                 let not_previously_inserted = self.type_collector.insert(ty);
                 if not_previously_inserted {
                     ty.super_visit_with(self)
@@ -2171,9 +2171,25 @@ impl fmt::Debug for TraitRefPrintOnlyTraitPath<'tcx> {
     }
 }
 
+/// Wrapper type for `ty::TraitRef` which opts-in to pretty printing only
+/// the trait name. That is, it will print `Trait` instead of
+/// `<T as Trait<U>>`.
+#[derive(Copy, Clone, TypeFoldable, Lift)]
+pub struct TraitRefPrintOnlyTraitName<'tcx>(ty::TraitRef<'tcx>);
+
+impl fmt::Debug for TraitRefPrintOnlyTraitName<'tcx> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Display::fmt(self, f)
+    }
+}
+
 impl ty::TraitRef<'tcx> {
     pub fn print_only_trait_path(self) -> TraitRefPrintOnlyTraitPath<'tcx> {
         TraitRefPrintOnlyTraitPath(self)
+    }
+
+    pub fn print_only_trait_name(self) -> TraitRefPrintOnlyTraitName<'tcx> {
+        TraitRefPrintOnlyTraitName(self)
     }
 }
 
@@ -2193,6 +2209,7 @@ forward_display_to_print! {
     ty::Binder<'tcx, ty::ExistentialPredicate<'tcx>>,
     ty::Binder<'tcx, ty::TraitRef<'tcx>>,
     ty::Binder<'tcx, TraitRefPrintOnlyTraitPath<'tcx>>,
+    ty::Binder<'tcx, TraitRefPrintOnlyTraitName<'tcx>>,
     ty::Binder<'tcx, ty::FnSig<'tcx>>,
     ty::Binder<'tcx, ty::TraitPredicate<'tcx>>,
     ty::Binder<'tcx, ty::SubtypePredicate<'tcx>>,
@@ -2253,6 +2270,10 @@ define_print_and_forward_display! {
 
     TraitRefPrintOnlyTraitPath<'tcx> {
         p!(print_def_path(self.0.def_id, self.0.substs));
+    }
+
+    TraitRefPrintOnlyTraitName<'tcx> {
+        p!(print_def_path(self.0.def_id, &[]));
     }
 
     ty::ParamTy {
@@ -2340,7 +2361,7 @@ define_print_and_forward_display! {
 fn for_each_def(tcx: TyCtxt<'_>, mut collect_fn: impl for<'b> FnMut(&'b Ident, Namespace, DefId)) {
     // Iterate all local crate items no matter where they are defined.
     let hir = tcx.hir();
-    for item in hir.krate().items() {
+    for item in hir.items() {
         if item.ident.name.as_str().is_empty() || matches!(item.kind, ItemKind::Use(_, _)) {
             continue;
         }
@@ -2408,7 +2429,7 @@ fn for_each_def(tcx: TyCtxt<'_>, mut collect_fn: impl for<'b> FnMut(&'b Ident, N
 ///
 /// The implementation uses similar import discovery logic to that of 'use' suggestions.
 fn trimmed_def_paths(tcx: TyCtxt<'_>, (): ()) -> FxHashMap<DefId, Symbol> {
-    let mut map = FxHashMap::default();
+    let mut map: FxHashMap<DefId, Symbol> = FxHashMap::default();
 
     if let TrimmedDefPaths::GoodPath = tcx.sess.opts.trimmed_def_paths {
         // For good paths causing this bug, the `rustc_middle::ty::print::with_no_trimmed_paths`
@@ -2446,8 +2467,29 @@ fn trimmed_def_paths(tcx: TyCtxt<'_>, (): ()) -> FxHashMap<DefId, Symbol> {
     });
 
     for ((_, symbol), opt_def_id) in unique_symbols_rev.drain() {
+        use std::collections::hash_map::Entry::{Occupied, Vacant};
+
         if let Some(def_id) = opt_def_id {
-            map.insert(def_id, symbol);
+            match map.entry(def_id) {
+                Occupied(mut v) => {
+                    // A single DefId can be known under multiple names (e.g.,
+                    // with a `pub use ... as ...;`). We need to ensure that the
+                    // name placed in this map is chosen deterministically, so
+                    // if we find multiple names (`symbol`) resolving to the
+                    // same `def_id`, we prefer the lexicographically smallest
+                    // name.
+                    //
+                    // Any stable ordering would be fine here though.
+                    if *v.get() != symbol {
+                        if v.get().as_str() > symbol.as_str() {
+                            v.insert(symbol);
+                        }
+                    }
+                }
+                Vacant(v) => {
+                    v.insert(symbol);
+                }
+            }
         }
     }
 

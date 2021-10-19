@@ -92,8 +92,7 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
             let expr = expr.peel_drop_temps();
             self.suggest_deref_ref_or_into(&mut err, expr, expected_ty, ty, None);
             extend_err(&mut err);
-            // Error possibly reported in `check_assign` so avoid emitting error again.
-            err.emit_unless(self.is_assign_to_bool(expr, expected_ty));
+            err.emit();
         }
         ty
     }
@@ -156,7 +155,7 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
     /// Note that inspecting a type's structure *directly* may expose the fact
     /// that there are actually multiple representations for `Error`, so avoid
     /// that when err needs to be handled differently.
-    #[instrument(skip(self), level = "debug")]
+    #[instrument(skip(self, expr), level = "debug")]
     pub(super) fn check_expr_with_expectation(
         &self,
         expr: &'tcx hir::Expr<'tcx>,
@@ -254,12 +253,13 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
         ty
     }
 
+    #[instrument(skip(self, expr), level = "debug")]
     fn check_expr_kind(
         &self,
         expr: &'tcx hir::Expr<'tcx>,
         expected: Expectation<'tcx>,
     ) -> Ty<'tcx> {
-        debug!("check_expr_kind(expected={:?}, expr={:?})", expected, expr);
+        trace!("expr={:#?}", expr);
 
         let tcx = self.tcx;
         match expr.kind {
@@ -2136,7 +2136,7 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
             idx_t
         } else {
             let base_t = self.structurally_resolved_type(base.span, base_t);
-            match self.lookup_indexing(expr, base, base_t, idx_t) {
+            match self.lookup_indexing(expr, base, base_t, idx, idx_t) {
                 Some((index_ty, element_ty)) => {
                     // two-phase not needed because index_ty is never mutable
                     self.demand_coerce(idx, idx_t, index_ty, None, AllowTwoPhase::No);
