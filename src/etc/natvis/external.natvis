@@ -211,23 +211,31 @@
     </Expand>
   </Type>
 
-  <Type Name="regex::re_trait::Locations">
-    <Expand>
-      <ExpandedItem>__0</ExpandedItem>
-    </Expand>
-  </Type>
-
   <Type Name="regex::re_unicode::Captures">
-    <DisplayString>{{ captures={locs.__0.len/2}, named_groups={named_groups.ptr.pointer->data.base.table.table.items} }}</DisplayString>
+    <Intrinsic Name="location" Expression="locs.__0.buf.ptr.pointer[i].variant1.__0">
+      <Parameter Name="i" Type="int" />
+    </Intrinsic>
+    <Intrinsic Name="match_length" Expression="location(end)-location(start)">
+      <Parameter Name="start" Type="int" />
+      <Parameter Name="end" Type="int" />
+    </Intrinsic>
+    <DisplayString>{{ named_groups={named_groups.ptr.pointer->data.base.table.table.items} }}</DisplayString>
     <Expand>
       <Item Name="[text]">text</Item>
-      <Item Name="[locations]">locs</Item>
       <Item Name="[named_groups]">named_groups</Item>
+      <CustomListItems>
+        <Variable Name="i" InitialValue="0" />
+        <Loop>
+          <Break Condition="locs.__0.buf.ptr.pointer[i].discriminant == 0" />
+          <Item>(char*)text.data_ptr+location(i),[location(i+1)-location(i)]s8</Item>
+          <Exec>i+=2</Exec>
+        </Loop>
+      </CustomListItems>
     </Expand>
   </Type>
 
   <Type Name="regex::re_unicode::Match">
-    <DisplayString>{{ start={start}, end={end}, match={text.data_ptr+start,[end-start]s8} }}</DisplayString>
+    <DisplayString>{text.data_ptr+start,[end-start]s8}</DisplayString>
     <Expand>
       <Item Name="[text]">text</Item>
       <Item Name="[start]">start</Item>
